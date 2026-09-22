@@ -17,7 +17,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y             ca-certificates curl git python3 python3-pil             build-essential cmake pkg-config             libpng-dev libusb-1.0-0-dev libudev-dev libsdl2-dev libncurses-dev
+          sudo apt-get install -y             ca-certificates curl git python3 python3-pil             build-essential cmake pkg-config             libpng-dev libusb-1.0-0-dev libudev-dev libudisks2-dev libsdl2-dev libncurses-dev
 
       - name: Install GiteaPC
         shell: bash
