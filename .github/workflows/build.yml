@@ -1,0 +1,66 @@
+name: Build PDFView.g3a
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ca-certificates curl git python3 python3-pil \
+            build-essential cmake pkg-config \
+            libpng-dev libusb-1.0-0-dev libudev-dev libsdl2-dev libncurses-dev
+
+      - name: Install GiteaPC
+        shell: bash
+        run: |
+          curl -fsSL "https://git.planet-casio.com/Lephenixnoir/GiteaPC/raw/branch/master/install.sh" \
+            -o /tmp/giteapc-install.sh
+          printf '\n' | bash /tmp/giteapc-install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          giteapc --help >/dev/null || giteapc
+
+      - name: Install fxSDK toolchain
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          giteapc install \
+            Lephenixnoir/fxsdk:noudisks2 \
+            Lephenixnoir/sh-elf-binutils \
+            Lephenixnoir/sh-elf-gcc
+          giteapc install \
+            Lephenixnoir/OpenLibm \
+            Vhex-Kernel-Core/fxlibc
+          giteapc install Lephenixnoir/sh-elf-gcc
+          giteapc install Lephenixnoir/gint
+          fxsdk --version || fxsdk
+
+      - name: Generate icons
+        run: python3 tools/generate_icons.py
+
+      - name: Build add-in
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          fxsdk build-cg
+          test -f PDFView.g3a
+          ls -lh PDFView.g3a
+
+      - name: Upload PDFView.g3a
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFView-CG50-g3a
+          path: PDFView.g3a
+          if-no-files-found: error
