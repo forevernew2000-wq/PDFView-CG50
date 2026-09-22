@@ -32,9 +32,17 @@ jobs:
         shell: bash
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          yes | giteapc install Lephenixnoir/fxsdk@dev Lephenixnoir/gint@dev
+          yes | giteapc install \
+            Lephenixnoir/fxsdk@dev:noudisks2 \
+            Lephenixnoir/sh-elf-binutils@dev \
+            Lephenixnoir/sh-elf-gcc@dev
+          yes | giteapc install Lephenixnoir/OpenLibm Vhex-Kernel-Core/fxlibc
+          yes | giteapc install Lephenixnoir/sh-elf-gcc@dev
+          yes | giteapc install Lephenixnoir/gint@dev
           command -v fxsdk
+          command -v sh-elf-gcc
           fxsdk --version || true
+          sh-elf-gcc --version | head -n 1
 
       - name: Generate icons
         run: python3 tools/generate_icons.py
