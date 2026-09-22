@@ -17,35 +17,24 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            ca-certificates curl git python3 python3-pil \
-            build-essential cmake pkg-config \
-            libpng-dev libusb-1.0-0-dev libudev-dev libsdl2-dev libncurses-dev
+          sudo apt-get install -y             ca-certificates curl git python3 python3-pil             build-essential cmake pkg-config             libpng-dev libusb-1.0-0-dev libudev-dev libsdl2-dev libncurses-dev
 
       - name: Install GiteaPC
         shell: bash
         run: |
-          curl -fsSL "https://git.planet-casio.com/Lephenixnoir/GiteaPC/raw/branch/master/install.sh" \
-            -o /tmp/giteapc-install.sh
+          curl -fsSL "https://git.planet-casio.com/Lephenixnoir/GiteaPC/raw/branch/master/install.sh"             -o /tmp/giteapc-install.sh
           printf '\n' | bash /tmp/giteapc-install.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.local/bin:$PATH"
-          giteapc --help >/dev/null || giteapc
+          command -v giteapc
 
-      - name: Install fxSDK toolchain
+      - name: Install current fxSDK + gint
         shell: bash
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          giteapc install \
-            Lephenixnoir/fxsdk:noudisks2 \
-            Lephenixnoir/sh-elf-binutils \
-            Lephenixnoir/sh-elf-gcc
-          giteapc install \
-            Lephenixnoir/OpenLibm \
-            Vhex-Kernel-Core/fxlibc
-          giteapc install Lephenixnoir/sh-elf-gcc
-          giteapc install Lephenixnoir/gint
-          fxsdk --version || fxsdk
+          yes | giteapc install Lephenixnoir/fxsdk@dev Lephenixnoir/gint@dev
+          command -v fxsdk
+          fxsdk --version || true
 
       - name: Generate icons
         run: python3 tools/generate_icons.py
