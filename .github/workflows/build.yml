@@ -33,12 +33,12 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           printf 'y\n' | giteapc install \
-            Lephenixnoir/fxsdk@dev:noudisks2 \
+            Lephenixnoir/fxsdk:noudisks2 \
             Lephenixnoir/sh-elf-binutils@dev \
             Lephenixnoir/sh-elf-gcc@dev
-          printf 'y\n' | giteapc install Lephenixnoir/OpenLibm Vhex-Kernel-Core/fxlibc@dev
+          printf 'y\n' | giteapc install Lephenixnoir/OpenLibm Vhex-Kernel-Core/fxlibc
           printf 'y\n' | giteapc install Lephenixnoir/sh-elf-gcc@dev
-          printf 'y\n' | giteapc install Lephenixnoir/gint@dev
+          printf 'y\n' | giteapc install Lephenixnoir/gint
           command -v fxsdk
           command -v sh-elf-gcc
           fxsdk --version || true
