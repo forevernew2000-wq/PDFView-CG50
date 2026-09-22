@@ -263,12 +263,12 @@ static int load_page(uint16_t page, page_request_t *req)
     req->fit_data = fit_buffer;
     req->zoom_data = zoom_buffer;
 
-    return gint_world_switch(GINT_CALL(os_load_page, req));
+    return gint_world_switch(GINT_CALL(os_load_page, (void *)req));
 }
 
 int main(void)
 {
-    int rc = gint_world_switch(GINT_CALL(os_load_header, &doc));
+    int rc = gint_world_switch(GINT_CALL(os_load_header, (void *)&doc));
 
     if(rc != 0) {
         show_message("PDFView CG50",
