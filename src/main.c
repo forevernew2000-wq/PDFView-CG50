@@ -2,11 +2,11 @@
 #include <gint/keyboard.h>
 #include <gint/gint.h>
 
+#include <dirent.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-#define DOCUMENT_PATH "/PDFVIEW.CGV"
 #define HEADER_SIZE 16
 #define INDEX_RECORD_SIZE 20
 
@@ -17,6 +17,10 @@
 
 #define MAX_ZOOM_BYTES (128 * 1024)
 #define PAN_STEP 48
+
+#define MAX_DOCUMENTS 32
+#define MAX_FILE_NAME 64
+#define SELECTOR_ROWS 8
 
 static const uint8_t MAGIC[8] = {'C','G','P','D','F','1',0,0};
 
@@ -39,6 +43,10 @@ static document_t doc;
 static uint8_t fit_buffer[FIT_BYTES];
 static uint8_t zoom_buffer[MAX_ZOOM_BYTES];
 
+static char document_path[MAX_FILE_NAME + 2];
+static char document_names[MAX_DOCUMENTS][MAX_FILE_NAME];
+static int document_count = 0;
+
 static uint16_t read_be16(uint8_t const *p)
 {
     return ((uint16_t)p[0] << 8) | p[1];
@@ -58,11 +66,50 @@ static int bit_get(uint8_t const *data, int stride, int x, int y)
     return (byte & (0x80u >> (x & 7))) != 0;
 }
 
+static int ascii_upper(int c)
+{
+    if(c >= 'a' && c <= 'z') return c - ('a' - 'A');
+    return c;
+}
+
+static int has_cgv_extension(char const *name)
+{
+    size_t n = strlen(name);
+    if(n < 4) return 0;
+
+    return name[n - 4] == '.'
+        && ascii_upper((unsigned char)name[n - 3]) == 'C'
+        && ascii_upper((unsigned char)name[n - 2]) == 'G'
+        && ascii_upper((unsigned char)name[n - 1]) == 'V';
+}
+
+static int scan_documents(void)
+{
+    document_count = 0;
+
+    DIR *dir = opendir("/");
+    if(!dir) return -1;
+
+    struct dirent *entry;
+
+    while((entry = readdir(dir)) != NULL) {
+        if(document_count >= MAX_DOCUMENTS) break;
+        if(!has_cgv_extension(entry->d_name)) continue;
+
+        snprintf(document_names[document_count], MAX_FILE_NAME,
+            "%s", entry->d_name);
+        document_count++;
+    }
+
+    closedir(dir);
+    return document_count;
+}
+
 /* File operations run in the calculator OS world. */
 static int os_load_header(document_t *out)
 {
     uint8_t h[HEADER_SIZE];
-    FILE *f = fopen(DOCUMENT_PATH, "rb");
+    FILE *f = fopen(document_path, "rb");
     if(!f) return -1;
 
     size_t n = fread(h, 1, sizeof h, f);
@@ -83,7 +130,7 @@ static int os_load_page(page_request_t *r)
 {
     uint8_t rec[INDEX_RECORD_SIZE];
 
-    FILE *f = fopen(DOCUMENT_PATH, "rb");
+    FILE *f = fopen(document_path, "rb");
     if(!f) return -1;
 
     if(r->page >= r->doc->page_count) {
@@ -172,8 +219,7 @@ static void show_help(void)
     dtext(8, 106, C_BLACK, "Arrows: pan while zoomed");
     dtext(8, 130, C_BLACK, "LEFT/RIGHT: page in fit mode");
     dtext(8, 154, C_BLACK, "F6: help");
-    dtext(8, 178, C_BLACK, "EXIT: quit");
-    dtext(8, 202, C_BLACK, "File: /PDFVIEW.CGV");
+    dtext(8, 178, C_BLACK, "EXIT: back to document list");
     dupdate();
     getkey();
 }
@@ -304,15 +350,90 @@ static int load_page(uint16_t page, page_request_t *req)
     return gint_world_switch(GINT_CALL(os_load_page, (void *)req));
 }
 
-int main(void)
+static void draw_selector(int selected)
 {
+    dclear(C_WHITE);
+
+    dtext(8, 7, C_BLACK, "PDFView - choose document");
+
+    char count_text[40];
+    snprintf(count_text, sizeof count_text, "%d CGV file(s)", document_count);
+    dtext(8, 27, C_BLACK, count_text);
+
+    int first = selected - SELECTOR_ROWS / 2;
+    if(first < 0) first = 0;
+    if(first + SELECTOR_ROWS > document_count) {
+        first = document_count - SELECTOR_ROWS;
+        if(first < 0) first = 0;
+    }
+
+    for(int row = 0; row < SELECTOR_ROWS; row++) {
+        int index = first + row;
+        if(index >= document_count) break;
+
+        int y = 48 + row * 20;
+
+        if(index == selected) {
+            drect(5, y - 2, DWIDTH - 6, y + 16, C_BLACK);
+            dtext(10, y, C_WHITE, document_names[index]);
+        }
+        else {
+            dtext(10, y, C_BLACK, document_names[index]);
+        }
+    }
+
+    dtext(8, 211, C_BLACK, "UP/DOWN choose   EXE open   EXIT quit");
+    dupdate();
+}
+
+static int choose_document(void)
+{
+    if(scan_documents() < 0) {
+        show_message("PDFView CG50",
+            "Could not scan storage.",
+            "Restart the calculator and try again.");
+        return -1;
+    }
+
+    if(document_count == 0) {
+        show_message("PDFView CG50",
+            "No .CGV files found.",
+            "Copy converted PDFs to storage root.");
+        return -1;
+    }
+
+    int selected = 0;
+
+    while(1) {
+        draw_selector(selected);
+        int key = getkey().key;
+
+        if(key == KEY_EXIT) return -1;
+
+        if(key == KEY_UP && selected > 0) {
+            selected--;
+        }
+        else if(key == KEY_DOWN && selected + 1 < document_count) {
+            selected++;
+        }
+        else if(key == KEY_EXE) {
+            return selected;
+        }
+    }
+}
+
+static int view_document(int selected)
+{
+    snprintf(document_path, sizeof document_path, "/%s",
+        document_names[selected]);
+
     int rc = gint_world_switch(GINT_CALL(os_load_header, (void *)&doc));
 
     if(rc != 0) {
         show_message("PDFView CG50",
-            "Cannot open /PDFVIEW.CGV",
-            "Copy PDFVIEW.CGV to storage root.");
-        return 1;
+            "Cannot open selected CGV.",
+            "Convert this PDF again.");
+        return 0;
     }
 
     uint16_t page = 0;
@@ -325,8 +446,8 @@ int main(void)
     if(rc != 0) {
         show_message("PDFView CG50",
             "Invalid or unsupported CGV.",
-            "Convert the PDF again.");
-        return 1;
+            "Convert this PDF again.");
+        return 0;
     }
 
     int zoom_level = 0;
@@ -340,7 +461,7 @@ int main(void)
         int need_redraw = 0;
         int page_changed = 0;
 
-        if(key == KEY_EXIT) break;
+        if(key == KEY_EXIT) return 0;
 
         if(key == KEY_F6) {
             show_help();
@@ -409,7 +530,7 @@ int main(void)
                 show_message("PDFView CG50",
                     "Could not load this page.",
                     "The CGV file may be damaged.");
-                break;
+                return 0;
             }
 
             if(zoom_level > 0) {
@@ -429,6 +550,15 @@ int main(void)
                 draw_fit();
             }
         }
+    }
+}
+
+int main(void)
+{
+    while(1) {
+        int selected = choose_document();
+        if(selected < 0) break;
+        view_document(selected);
     }
 
     return 1;
