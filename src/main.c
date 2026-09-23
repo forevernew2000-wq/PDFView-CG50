@@ -167,8 +167,8 @@ static void show_help(void)
     dclear(C_WHITE);
     dtext(8, 8, C_BLACK, "PDFView CG50");
     dtext(8, 34, C_BLACK, "F1/F2: previous/next page");
-    dtext(8, 58, C_BLACK, "+ : zoom");
-    dtext(8, 82, C_BLACK, "- : fit whole page");
+    dtext(8, 58, C_BLACK, "+ : zoom in (1x/2x/3x)");
+    dtext(8, 82, C_BLACK, "- : zoom out / fit");
     dtext(8, 106, C_BLACK, "Arrows: pan while zoomed");
     dtext(8, 130, C_BLACK, "LEFT/RIGHT: page in fit mode");
     dtext(8, 154, C_BLACK, "F6: help");
@@ -224,10 +224,13 @@ static void draw_fit(void)
     dupdate();
 }
 
-static void clamp_pan(int *pan_x, int *pan_y, int zoom_w, int zoom_h)
+static void clamp_pan(int *pan_x, int *pan_y,
+    int zoom_w, int zoom_h, int scale)
 {
-    int max_x = zoom_w > DWIDTH ? zoom_w - DWIDTH : 0;
-    int max_y = zoom_h > DHEIGHT ? zoom_h - DHEIGHT : 0;
+    int view_w = DWIDTH / scale;
+    int view_h = DHEIGHT / scale;
+    int max_x = zoom_w > view_w ? zoom_w - view_w : 0;
+    int max_y = zoom_h > view_h ? zoom_h - view_h : 0;
 
     if(*pan_x < 0) *pan_x = 0;
     if(*pan_y < 0) *pan_y = 0;
@@ -235,24 +238,59 @@ static void clamp_pan(int *pan_x, int *pan_y, int zoom_w, int zoom_h)
     if(*pan_y > max_y) *pan_y = max_y;
 }
 
-static void reset_pan(int *pan_x, int *pan_y, int zoom_w, int zoom_h)
+static void reset_pan(int *pan_x, int *pan_y,
+    int zoom_w, int zoom_h, int scale)
 {
-    *pan_x = zoom_w > DWIDTH ? (zoom_w - DWIDTH) / 2 : 0;
+    int view_w = DWIDTH / scale;
+    *pan_x = zoom_w > view_w ? (zoom_w - view_w) / 2 : 0;
     *pan_y = 0;
-    clamp_pan(pan_x, pan_y, zoom_w, zoom_h);
+    clamp_pan(pan_x, pan_y, zoom_w, zoom_h, scale);
 }
 
-static void draw_zoom(int pan_x, int pan_y, int zoom_w, int zoom_h)
+static void draw_zoom(int pan_x, int pan_y,
+    int zoom_w, int zoom_h, int scale)
 {
     int stride = (zoom_w + 7) / 8;
-    int visible_w = zoom_w < DWIDTH ? zoom_w : DWIDTH;
-    int visible_h = zoom_h < DHEIGHT ? zoom_h : DHEIGHT;
-    int dst_x = (DWIDTH - visible_w) / 2;
-    int dst_y = (DHEIGHT - visible_h) / 2;
+    int view_w = DWIDTH / scale;
+    int view_h = DHEIGHT / scale;
+    int visible_w = zoom_w - pan_x;
+    int visible_h = zoom_h - pan_y;
+
+    if(visible_w > view_w) visible_w = view_w;
+    if(visible_h > view_h) visible_h = view_h;
+
+    int dst_w = visible_w * scale;
+    int dst_h = visible_h * scale;
+    int dst_x = (DWIDTH - dst_w) / 2;
+    int dst_y = (DHEIGHT - dst_h) / 2;
 
     dclear(C_WHITE);
-    draw_horizontal_runs(zoom_buffer, stride, pan_x, pan_y,
-        visible_w, visible_h, dst_x, dst_y);
+
+    for(int y = 0; y < visible_h; y++) {
+        int run = -1;
+
+        for(int x = 0; x <= visible_w; x++) {
+            int black = 0;
+
+            if(x < visible_w) {
+                black = bit_get(zoom_buffer, stride,
+                    pan_x + x, pan_y + y);
+            }
+
+            if(black && run < 0) run = x;
+
+            if(!black && run >= 0) {
+                drect(
+                    dst_x + run * scale,
+                    dst_y + y * scale,
+                    dst_x + x * scale - 1,
+                    dst_y + (y + 1) * scale - 1,
+                    C_BLACK);
+                run = -1;
+            }
+        }
+    }
+
     dupdate();
 }
 
@@ -291,7 +329,7 @@ int main(void)
         return 1;
     }
 
-    int zoomed = 0;
+    int zoom_level = 0;
     int pan_x = 0;
     int pan_y = 0;
 
@@ -309,36 +347,58 @@ int main(void)
             need_redraw = 1;
         }
         else if(key == KEY_ADD) {
-            if(!zoomed) {
-                zoomed = 1;
-                reset_pan(&pan_x, &pan_y, req.zoom_w, req.zoom_h);
+            if(zoom_level < 3) {
+                zoom_level++;
+
+                if(zoom_level == 1) {
+                    reset_pan(&pan_x, &pan_y,
+                        req.zoom_w, req.zoom_h, zoom_level);
+                }
+                else {
+                    clamp_pan(&pan_x, &pan_y,
+                        req.zoom_w, req.zoom_h, zoom_level);
+                }
+
                 need_redraw = 1;
             }
         }
         else if(key == KEY_SUB) {
-            if(zoomed) {
-                zoomed = 0;
+            if(zoom_level > 0) {
+                zoom_level--;
+
+                if(zoom_level > 0) {
+                    clamp_pan(&pan_x, &pan_y,
+                        req.zoom_w, req.zoom_h, zoom_level);
+                }
+
                 need_redraw = 1;
             }
         }
-        else if(key == KEY_F1 || (!zoomed && key == KEY_LEFT)) {
+        else if(key == KEY_F1 ||
+            (zoom_level == 0 && key == KEY_LEFT)) {
             if(page > 0) {
                 page--;
                 page_changed = 1;
             }
         }
-        else if(key == KEY_F2 || (!zoomed && key == KEY_RIGHT)) {
+        else if(key == KEY_F2 ||
+            (zoom_level == 0 && key == KEY_RIGHT)) {
             if(page + 1 < doc.page_count) {
                 page++;
                 page_changed = 1;
             }
         }
-        else if(zoomed) {
-            if(key == KEY_LEFT)  { pan_x -= PAN_STEP; need_redraw = 1; }
-            if(key == KEY_RIGHT) { pan_x += PAN_STEP; need_redraw = 1; }
-            if(key == KEY_UP)    { pan_y -= PAN_STEP; need_redraw = 1; }
-            if(key == KEY_DOWN)  { pan_y += PAN_STEP; need_redraw = 1; }
-            clamp_pan(&pan_x, &pan_y, req.zoom_w, req.zoom_h);
+        else if(zoom_level > 0) {
+            int step = PAN_STEP / zoom_level;
+            if(step < 1) step = 1;
+
+            if(key == KEY_LEFT)  { pan_x -= step; need_redraw = 1; }
+            if(key == KEY_RIGHT) { pan_x += step; need_redraw = 1; }
+            if(key == KEY_UP)    { pan_y -= step; need_redraw = 1; }
+            if(key == KEY_DOWN)  { pan_y += step; need_redraw = 1; }
+
+            clamp_pan(&pan_x, &pan_y,
+                req.zoom_w, req.zoom_h, zoom_level);
         }
 
         if(page_changed) {
@@ -352,16 +412,22 @@ int main(void)
                 break;
             }
 
-            if(zoomed) {
-                reset_pan(&pan_x, &pan_y, req.zoom_w, req.zoom_h);
+            if(zoom_level > 0) {
+                reset_pan(&pan_x, &pan_y,
+                    req.zoom_w, req.zoom_h, zoom_level);
             }
 
             need_redraw = 1;
         }
 
         if(need_redraw) {
-            if(zoomed) draw_zoom(pan_x, pan_y, req.zoom_w, req.zoom_h);
-            else draw_fit();
+            if(zoom_level > 0) {
+                draw_zoom(pan_x, pan_y,
+                    req.zoom_w, req.zoom_h, zoom_level);
+            }
+            else {
+                draw_fit();
+            }
         }
     }
 
