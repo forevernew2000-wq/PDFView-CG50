@@ -3,10 +3,11 @@ setlocal
 cd /d "%~dp0"
 
 if "%~1"=="" (
-  echo Arrastra un archivo PDF encima de convertir_pdf.bat
+  echo Arrastra uno o VARIOS archivos PDF encima de convertir_pdf.bat
   echo.
-  echo IMPORTANTE: el conversor procesa TODAS las paginas que existan en el PDF.
-  echo Si al final dice 1/1, entonces el PDF de origen solo tiene una pagina.
+  echo Se creara un archivo .CGV por cada PDF usando el mismo nombre.
+  echo Ejemplo: Cartografia.pdf -^> Cartografia.CGV
+  echo.
   pause
   exit /b 1
 )
@@ -23,17 +24,35 @@ if errorlevel 1 (
 )
 
 echo.
-echo Convirtiendo TODAS las paginas con detalle alto...
+echo Convirtiendo TODOS los PDFs y TODAS sus paginas...
 echo.
-py pdf_to_cgv.py "%~1" -o "%~dp0PDFVIEW.CGV" --max-side 1024
+
+:loop
+if "%~1"=="" goto done
+
+echo ========================================
+echo PDF: %~nx1
+echo Salida: %~n1.CGV
+echo ========================================
+py pdf_to_cgv.py "%~1" -o "%~dp0%~n1.CGV" --max-side 1024
 if errorlevel 1 (
   echo.
-  echo Hubo un error durante la conversion.
-  pause
-  exit /b 1
+  echo ERROR convirtiendo: %~nx1
+  echo.
+) else (
+  echo OK: %~n1.CGV
+  echo.
 )
 
+shift
+goto loop
+
+:done
+echo ========================================
+echo LISTO
+echo ========================================
 echo.
-echo Listo. Copia PDFVIEW.CGV a la raiz de la fx-CG50.
-echo Usa F1/F2 para cambiar de pagina.
+echo Copia a la raiz de la fx-CG50 todos los .CGV que quieras usar.
+echo PDFView v3 los mostrara en una lista para elegir.
+echo.
 pause
