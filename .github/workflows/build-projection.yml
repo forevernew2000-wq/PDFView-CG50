@@ -1,0 +1,66 @@
+name: Build ProyCalc.g3a
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'projection/**'
+      - '.github/workflows/build-projection.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl git python3 python3-pil build-essential cmake pkg-config libpng-dev libusb-1.0-0-dev libudev-dev libudisks2-dev libsdl2-dev libncurses-dev libgmp-dev libmpfr-dev libmpc-dev libppl-dev
+
+      - name: Install GiteaPC
+        shell: bash
+        run: |
+          curl -fsSL "https://git.planet-casio.com/Lephenixnoir/GiteaPC/raw/branch/master/install.sh" -o /tmp/giteapc-install.sh
+          printf '\n' | bash /tmp/giteapc-install.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          command -v giteapc
+
+      - name: Install fxSDK toolchain
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          printf 'y\n' | giteapc install \
+            Lephenixnoir/fxsdk:noudisks2 \
+            Lephenixnoir/sh-elf-binutils@dev \
+            Lephenixnoir/sh-elf-gcc@dev
+          printf 'y\n' | giteapc install Lephenixnoir/OpenLibm Vhex-Kernel-Core/fxlibc
+          printf 'y\n' | giteapc install Lephenixnoir/sh-elf-gcc@dev
+          printf 'y\n' | giteapc install Lephenixnoir/gint
+          command -v fxsdk
+          command -v sh-elf-gcc
+
+      - name: Generate icons
+        working-directory: projection
+        run: python3 tools/generate_icons.py
+
+      - name: Build ProyCalc
+        working-directory: projection
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          fxsdk build-cg
+          test -f ProyCalc.g3a
+          ls -lh ProyCalc.g3a
+
+      - name: Upload ProyCalc.g3a
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProyCalc-CG50-g3a
+          path: projection/ProyCalc.g3a
+          if-no-files-found: error
