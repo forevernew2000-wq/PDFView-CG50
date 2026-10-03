@@ -3,6 +3,9 @@ name: Build PDFView.g3a
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'projection/**'
+      - '.github/workflows/build-projection.yml'
   workflow_dispatch:
 
 jobs:
