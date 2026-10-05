@@ -13,6 +13,7 @@
 typedef struct {
     int deg;
     int min;
+    int sec;
 } coord_t;
 
 typedef struct {
@@ -36,8 +37,8 @@ static const char POINT_LABELS[9] = {'A','B','C','D','E','F','G','H','I'};
 static input_t in = {
     .radius = 6378137,
     .scale = 400000,
-    .phi = {{10,0},{10,10},{10,20}},
-    .lambda = {{50,30},{50,20},{50,10}},
+    .phi = {{10,0,0},{10,10,0},{10,20,0}},
+    .lambda = {{50,30,0},{50,20,0},{50,10,0}},
 };
 
 static double rad(double deg)
@@ -47,7 +48,9 @@ static double rad(double deg)
 
 static double coord_decimal(coord_t c)
 {
-    return (double)c.deg + (double)c.min / 60.0;
+    return (double)c.deg
+        + (double)c.min / 60.0
+        + (double)c.sec / 3600.0;
 }
 
 static void fmt_fixed(char *buf, size_t size, double value, int decimals)
@@ -172,49 +175,64 @@ static void edit_coord(char const *name, coord_t *c, int max_deg)
 {
     int original_deg = c->deg;
     int original_min = c->min;
+    int original_sec = c->sec;
     int deg = c->deg;
     int min = c->min;
+    int sec = c->sec;
     int field = 0;
     int fresh = 1;
 
     while(1) {
-        char deg_text[16], min_text[16], complete[64];
+        char deg_text[16], min_text[16], sec_text[16], complete[72];
 
         snprintf(deg_text, sizeof deg_text, "%d", deg);
         snprintf(min_text, sizeof min_text, "%02d", min);
-        snprintf(complete, sizeof complete, "%s = %d deg %02d'", name, deg, min);
+        snprintf(sec_text, sizeof sec_text, "%02d", sec);
+        snprintf(complete, sizeof complete,
+            "%s = %d deg %02d' %02d\"", name, deg, min, sec);
 
         dclear(C_WHITE);
-        dprint(8, 7, C_BLACK, "EDITAR %s", name);
-        dtext(8, 30, C_BLACK, "Selecciona grados o minutos");
+        dprint(8, 6, C_BLACK, "EDITAR %s", name);
+        dtext(8, 26, C_BLACK, "Grados / minutos / segundos");
 
-        dtext(77, 60, C_BLACK, "GRADOS");
-        dtext(239, 60, C_BLACK, "MINUTOS");
+        dtext(31, 55, C_BLACK, "GRADOS");
+        dtext(149, 55, C_BLACK, "MINUTOS");
+        dtext(268, 55, C_BLACK, "SEGUNDOS");
 
-        draw_box(47, 82, 164, 127, field == 0);
-        draw_box(211, 82, 328, 127, field == 1);
+        draw_box(10, 76, 116, 121, field == 0);
+        draw_box(139, 76, 245, 121, field == 1);
+        draw_box(268, 76, 374, 121, field == 2);
 
-        dtext(82, 96, field == 0 ? C_WHITE : C_BLACK, deg_text);
-        dtext(250, 96, field == 1 ? C_WHITE : C_BLACK, min_text);
+        dtext(43, 91, field == 0 ? C_WHITE : C_BLACK, deg_text);
+        dtext(177, 91, field == 1 ? C_WHITE : C_BLACK, min_text);
+        dtext(306, 91, field == 2 ? C_WHITE : C_BLACK, sec_text);
 
-        draw_centered(145, complete);
-        dtext(13, 173, C_BLACK, "<- -> cambiar   0-9 escribir");
-        dtext(13, 195, C_BLACK, "DEL borrar  EXE guardar  EXIT cancelar");
+        draw_centered(139, complete);
+        dtext(10, 166, C_BLACK, "<- -> campo     0-9 escribir");
+        dtext(10, 189, C_BLACK, "DEL borrar  EXE guardar  EXIT cancelar");
         dupdate();
 
         int key = getkey().key;
         int digit = key_digit(key);
 
-        if(key == KEY_LEFT || key == KEY_RIGHT) {
-            field = 1 - field;
+        if(key == KEY_LEFT) {
+            if(field > 0) field--;
             fresh = 1;
         }
-        else if(key == KEY_UP || key == KEY_DOWN) {
-            field = 1 - field;
+        else if(key == KEY_RIGHT) {
+            if(field < 2) field++;
+            fresh = 1;
+        }
+        else if(key == KEY_UP) {
+            field = (field + 2) % 3;
+            fresh = 1;
+        }
+        else if(key == KEY_DOWN) {
+            field = (field + 1) % 3;
             fresh = 1;
         }
         else if(digit >= 0) {
-            int *value = field == 0 ? &deg : &min;
+            int *value = field == 0 ? &deg : (field == 1 ? &min : &sec);
             int limit = field == 0 ? max_deg : 59;
             int candidate = fresh ? digit : (*value * 10 + digit);
 
@@ -224,18 +242,20 @@ static void edit_coord(char const *name, coord_t *c, int max_deg)
             }
         }
         else if(key == KEY_DEL) {
-            int *value = field == 0 ? &deg : &min;
+            int *value = field == 0 ? &deg : (field == 1 ? &min : &sec);
             *value /= 10;
             fresh = 0;
         }
         else if(key == KEY_EXE) {
             c->deg = deg;
             c->min = min;
+            c->sec = sec;
             return;
         }
         else if(key == KEY_EXIT) {
             c->deg = original_deg;
             c->min = original_min;
+            c->sec = original_sec;
             return;
         }
     }
@@ -298,32 +318,36 @@ static void show_grid(void)
 static void draw_main_menu(int selected)
 {
     dclear(C_WHITE);
-    draw_centered(6, "PROYCALC v2 - fx-CG50");
-    draw_centered(28, "Proyecciones planas");
+    draw_centered(4, "PROYCALC v3 - fx-CG50");
+    draw_centered(23, "Proyecciones planas");
 
-    int y1 = 56;
-    int y2 = 117;
+    int ys[3] = {43, 94, 145};
 
-    draw_box(18, y1, DWIDTH - 19, y1 + 51, selected == 0);
-    dtext(32, y1 + 8, selected == 0 ? C_WHITE : C_BLACK,
+    draw_box(16, ys[0], DWIDTH - 17, ys[0] + 43, selected == 0);
+    dtext(28, ys[0] + 6, selected == 0 ? C_WHITE : C_BLACK,
         "1. EQUIDISTANTE MERIDIANA");
-    dtext(32, y1 + 29, selected == 0 ? C_WHITE : C_BLACK,
+    dtext(28, ys[0] + 24, selected == 0 ? C_WHITE : C_BLACK,
         "m = R * delta");
 
-    draw_box(18, y2, DWIDTH - 19, y2 + 51, selected == 1);
-    dtext(32, y2 + 8, selected == 1 ? C_WHITE : C_BLACK,
+    draw_box(16, ys[1], DWIDTH - 17, ys[1] + 43, selected == 1);
+    dtext(28, ys[1] + 6, selected == 1 ? C_WHITE : C_BLACK,
         "2. EQUIDISTANTE TRANSVERSAL");
-    dtext(32, y2 + 29, selected == 1 ? C_WHITE : C_BLACK,
+    dtext(28, ys[1] + 24, selected == 1 ? C_WHITE : C_BLACK,
         "m = R * seno(delta)");
 
-    dtext(16, 187, C_BLACK, "ARRIBA/ABAJO elegir   EXE abrir");
-    dtext(16, 203, C_BLACK, "F1/F2 acceso rapido    EXIT salir");
+    draw_box(16, ys[2], DWIDTH - 17, ys[2] + 43, selected == 2);
+    dtext(28, ys[2] + 6, selected == 2 ? C_WHITE : C_BLACK,
+        "3. RESULTADO RAPIDO");
+    dtext(28, ys[2] + 24, selected == 2 ? C_WHITE : C_BLACK,
+        "un solo phi + lambda");
+
+    dtext(9, 198, C_BLACK, "ARRIBA/ABAJO elegir  EXE abrir  EXIT salir");
     dupdate();
 }
 
 static void format_coord(char *buf, size_t n, coord_t c)
 {
-    snprintf(buf, n, "%d deg %02d'", c.deg, c.min);
+    snprintf(buf, n, "%d deg %02d' %02d\"", c.deg, c.min, c.sec);
 }
 
 static void draw_input_screen(int mode, int selected)
@@ -465,10 +489,11 @@ static void draw_point_detail(int mode, int p, result_t *r)
         mode == 0 ? "MERIDIANA" : "TRANSVERSAL");
     dline(8, 27, DWIDTH - 9, 27, C_BLACK);
 
-    dprint(8, 39, C_BLACK, "phi%d    = %d deg %02d'",
-        phi_i + 1, in.phi[phi_i].deg, in.phi[phi_i].min);
-    dprint(8, 59, C_BLACK, "lambda%d = %d deg %02d'",
-        lambda_i + 1, in.lambda[lambda_i].deg, in.lambda[lambda_i].min);
+    dprint(8, 39, C_BLACK, "phi%d    = %d deg %02d' %02d\"",
+        phi_i + 1, in.phi[phi_i].deg, in.phi[phi_i].min, in.phi[phi_i].sec);
+    dprint(8, 59, C_BLACK, "lambda%d = %d deg %02d' %02d\"",
+        lambda_i + 1, in.lambda[lambda_i].deg, in.lambda[lambda_i].min,
+        in.lambda[lambda_i].sec);
 
     fmt_fixed(buf, sizeof buf, r->delta, 2);
     dprint(8, 84, C_BLACK, "delta   = %s deg", buf);
@@ -567,6 +592,115 @@ static void results_screen(int mode)
     }
 }
 
+static coord_t quick_phi = {10, 0, 0};
+static coord_t quick_lambda = {50, 30, 0};
+
+static void compute_single(int mode, coord_t phi_c, coord_t lambda_c,
+    result_t *r)
+{
+    double phi = coord_decimal(phi_c);
+    double lambda = coord_decimal(lambda_c);
+    double delta = 90.0 - phi;
+
+    double m;
+    if(mode == 0) {
+        m = (double)in.radius * rad(delta);
+    }
+    else {
+        m = (double)in.radius * sin(rad(delta));
+    }
+
+    r->delta = delta;
+    r->m = m;
+    r->y = m * sin(rad(lambda));
+    r->x = m * cos(rad(lambda));
+    r->y_cm = r->y / (double)in.scale * 100.0;
+    r->x_cm = r->x / (double)in.scale * 100.0;
+}
+
+static void draw_quick_screen(int mode, int selected)
+{
+    result_t r;
+    compute_single(mode, quick_phi, quick_lambda, &r);
+
+    char phi_text[48], lambda_text[48], buf[40];
+    format_coord(phi_text, sizeof phi_text, quick_phi);
+    format_coord(lambda_text, sizeof lambda_text, quick_lambda);
+
+    dclear(C_WHITE);
+    dprint(6, 4, C_BLACK, "RESULTADO RAPIDO | %s",
+        mode == 0 ? "MERID" : "TRANSV");
+    dprint(6, 22, C_BLACK, "R=%lu  Escala=1:%lu",
+        (unsigned long)in.radius, (unsigned long)in.scale);
+
+    if(selected == 0) {
+        drect(4, 40, DWIDTH - 5, 58, C_BLACK);
+        dtext(10, 43, C_WHITE, "phi");
+        dtext(92, 43, C_WHITE, phi_text);
+    }
+    else {
+        dtext(10, 43, C_BLACK, "phi");
+        dtext(92, 43, C_BLACK, phi_text);
+    }
+
+    if(selected == 1) {
+        drect(4, 62, DWIDTH - 5, 80, C_BLACK);
+        dtext(10, 65, C_WHITE, "lambda");
+        dtext(92, 65, C_WHITE, lambda_text);
+    }
+    else {
+        dtext(10, 65, C_BLACK, "lambda");
+        dtext(92, 65, C_BLACK, lambda_text);
+    }
+
+    dline(5, 87, DWIDTH - 6, 87, C_BLACK);
+
+    fmt_fixed(buf, sizeof buf, r.delta, 4);
+    dprint(8, 94, C_BLACK, "delta  = %s deg", buf);
+
+    fmt_fixed(buf, sizeof buf, r.m, 2);
+    dprint(8, 112, C_BLACK, "m      = %s", buf);
+
+    fmt_fixed(buf, sizeof buf, r.y, 2);
+    dprint(8, 130, C_BLACK, "Y real = %s m", buf);
+
+    fmt_fixed(buf, sizeof buf, r.x, 2);
+    dprint(8, 148, C_BLACK, "X real = %s m", buf);
+
+    fmt_fixed(buf, sizeof buf, r.y_cm, 2);
+    dprint(8, 166, C_BLACK, "Y plano= %s cm", buf);
+
+    fmt_fixed(buf, sizeof buf, r.x_cm, 2);
+    dprint(8, 184, C_BLACK, "X plano= %s cm", buf);
+
+    dtext(5, 202, C_BLACK, "EXE editar  F1 cambiar proyeccion  EXIT");
+    dupdate();
+}
+
+static void quick_result_screen(void)
+{
+    int mode = 0;
+    int selected = 0;
+
+    while(1) {
+        draw_quick_screen(mode, selected);
+        int key = getkey().key;
+
+        if(key == KEY_EXIT) return;
+        if(key == KEY_UP && selected > 0) selected--;
+        else if(key == KEY_DOWN && selected < 1) selected++;
+        else if(key == KEY_F1) mode = 1 - mode;
+        else if(key == KEY_EXE) {
+            if(selected == 0) {
+                edit_coord("phi", &quick_phi, 90);
+            }
+            else {
+                edit_coord("lambda", &quick_lambda, 359);
+            }
+        }
+    }
+}
+
 static void input_screen(int mode)
 {
     int selected = 0;
@@ -631,11 +765,12 @@ int main(void)
         if(key == KEY_UP && selected > 0) {
             selected--;
         }
-        else if(key == KEY_DOWN && selected < 1) {
+        else if(key == KEY_DOWN && selected < 2) {
             selected++;
         }
         else if(key == KEY_EXE) {
-            input_screen(selected);
+            if(selected < 2) input_screen(selected);
+            else quick_result_screen();
         }
         else if(key == KEY_F1) {
             input_screen(0);
