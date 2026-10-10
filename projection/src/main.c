@@ -53,6 +53,40 @@ static double coord_decimal(coord_t c)
         + (double)c.sec / 3600.0;
 }
 
+static char const *projection_name(int mode)
+{
+    if(mode == 0) return "EQUIDISTANTE MERIDIANA";
+    if(mode == 1) return "EQUIDISTANTE TRANSVERSAL";
+    if(mode == 2) return "EQUIVALENTE";
+    return "CONFORME";
+}
+
+static char const *projection_short(int mode)
+{
+    if(mode == 0) return "MERID";
+    if(mode == 1) return "TRANSV";
+    if(mode == 2) return "EQUIV";
+    return "CONF";
+}
+
+static char const *projection_formula(int mode)
+{
+    if(mode == 0) return "m = R * delta";
+    if(mode == 1) return "m = R * seno(delta)";
+    if(mode == 2) return "m = 2R * seno(delta/2)";
+    return "m = 2R * tan(delta/2)";
+}
+
+static double projection_m(int mode, double radius, double delta_deg)
+{
+    double delta = rad(delta_deg);
+
+    if(mode == 0) return radius * delta;
+    if(mode == 1) return radius * sin(delta);
+    if(mode == 2) return 2.0 * radius * sin(delta / 2.0);
+    return 2.0 * radius * tan(delta / 2.0);
+}
+
 static void fmt_fixed(char *buf, size_t size, double value, int decimals)
 {
     int negative = value < 0.0;
@@ -264,24 +298,24 @@ static void edit_coord(char const *name, coord_t *c, int max_deg)
 static void show_formula(int mode)
 {
     dclear(C_WHITE);
-    dtext(8, 8, C_BLACK,
-        mode == 0 ? "EQUIDISTANTE MERIDIANA" : "EQUIDISTANTE TRANSVERSAL");
+    dtext(8, 8, C_BLACK, projection_name(mode));
 
     dtext(8, 39, C_BLACK, "delta = 90 - phi");
+    dtext(8, 67, C_BLACK, projection_formula(mode));
 
     if(mode == 0) {
-        dtext(8, 67, C_BLACK, "m = R * delta (en radianes)");
+        dtext(8, 87, C_BLACK, "delta se usa en radianes");
     }
     else {
-        dtext(8, 67, C_BLACK, "m = R * seno(delta)");
+        dtext(8, 87, C_BLACK, "seno/tan usan delta en radianes");
     }
 
-    dtext(8, 95, C_BLACK, "Y = m * seno(lambda)");
-    dtext(8, 123, C_BLACK, "X = m * cos(lambda)");
-    dtext(8, 151, C_BLACK, "Plano cm = metros / escala * 100");
+    dtext(8, 111, C_BLACK, "Y = m * seno(lambda)");
+    dtext(8, 139, C_BLACK, "X = m * cos(lambda)");
+    dtext(8, 167, C_BLACK, "Plano cm = metros / escala * 100");
 
-    dline(8, 178, DWIDTH - 9, 178, C_BLACK);
-    dtext(8, 190, C_BLACK, "Basado en tu Excel | tecla para volver");
+    dline(8, 188, DWIDTH - 9, 188, C_BLACK);
+    dtext(8, 199, C_BLACK, "Cualquier tecla para volver");
     dupdate();
     getkey();
 }
@@ -317,31 +351,42 @@ static void show_grid(void)
 
 static void draw_main_menu(int selected)
 {
+    static char const *titles[5] = {
+        "1. EQUIDISTANTE MERIDIANA",
+        "2. EQUIDISTANTE TRANSVERSAL",
+        "3. EQUIVALENTE",
+        "4. CONFORME",
+        "5. RESULTADO RAPIDO"
+    };
+
+    static char const *subtitles[5] = {
+        "m = R * delta",
+        "m = R * seno(delta)",
+        "m = 2R * seno(delta/2)",
+        "m = 2R * tan(delta/2)",
+        "un solo phi + lambda"
+    };
+
     dclear(C_WHITE);
-    draw_centered(4, "PROYCALC v3 - fx-CG50");
-    draw_centered(23, "Proyecciones planas");
+    draw_centered(3, "PROYCALC v4 - fx-CG50");
 
-    int ys[3] = {43, 94, 145};
+    for(int i = 0; i < 5; i++) {
+        int y = 25 + i * 34;
+        int fg = C_BLACK;
 
-    draw_box(16, ys[0], DWIDTH - 17, ys[0] + 43, selected == 0);
-    dtext(28, ys[0] + 6, selected == 0 ? C_WHITE : C_BLACK,
-        "1. EQUIDISTANTE MERIDIANA");
-    dtext(28, ys[0] + 24, selected == 0 ? C_WHITE : C_BLACK,
-        "m = R * delta");
+        if(i == selected) {
+            drect(8, y, DWIDTH - 9, y + 30, C_BLACK);
+            fg = C_WHITE;
+        }
+        else {
+            draw_box(8, y, DWIDTH - 9, y + 30, 0);
+        }
 
-    draw_box(16, ys[1], DWIDTH - 17, ys[1] + 43, selected == 1);
-    dtext(28, ys[1] + 6, selected == 1 ? C_WHITE : C_BLACK,
-        "2. EQUIDISTANTE TRANSVERSAL");
-    dtext(28, ys[1] + 24, selected == 1 ? C_WHITE : C_BLACK,
-        "m = R * seno(delta)");
+        dtext(18, y + 3, fg, titles[i]);
+        dtext(28, y + 16, fg, subtitles[i]);
+    }
 
-    draw_box(16, ys[2], DWIDTH - 17, ys[2] + 43, selected == 2);
-    dtext(28, ys[2] + 6, selected == 2 ? C_WHITE : C_BLACK,
-        "3. RESULTADO RAPIDO");
-    dtext(28, ys[2] + 24, selected == 2 ? C_WHITE : C_BLACK,
-        "un solo phi + lambda");
-
-    dtext(9, 198, C_BLACK, "ARRIBA/ABAJO elegir  EXE abrir  EXIT salir");
+    dtext(8, 199, C_BLACK, "ARRIBA/ABAJO elegir   EXE abrir   EXIT");
     dupdate();
 }
 
@@ -356,8 +401,7 @@ static void draw_input_screen(int mode, int selected)
     char value[48];
 
     dclear(C_WHITE);
-    dprint(7, 4, C_BLACK, "%s | DATOS",
-        mode == 0 ? "MERIDIANA" : "TRANSVERSAL");
+    dprint(7, 4, C_BLACK, "%s | DATOS", projection_short(mode));
     dtext(7, 20, C_BLACK, "Selecciona una fila y presiona EXE");
 
     for(int row = 0; row < ROWS; row++) {
@@ -406,13 +450,7 @@ static void compute_results(int mode, result_t out[9])
         double lambda = coord_decimal(in.lambda[lambda_i]);
         double delta = 90.0 - phi;
 
-        double m;
-        if(mode == 0) {
-            m = (double)in.radius * rad(delta);
-        }
-        else {
-            m = (double)in.radius * sin(rad(delta));
-        }
+        double m = projection_m(mode, (double)in.radius, delta);
 
         double y = m * sin(rad(lambda));
         double x = m * cos(rad(lambda));
@@ -485,8 +523,8 @@ static void draw_point_detail(int mode, int p, result_t *r)
     char buf[40];
 
     dclear(C_WHITE);
-    dprint(8, 6, C_BLACK, "PUNTO %c | %s", POINT_LABELS[p],
-        mode == 0 ? "MERIDIANA" : "TRANSVERSAL");
+    dprint(8, 6, C_BLACK, "PUNTO %c | %s",
+        POINT_LABELS[p], projection_short(mode));
     dline(8, 27, DWIDTH - 9, 27, C_BLACK);
 
     dprint(8, 39, C_BLACK, "phi%d    = %d deg %02d' %02d\"",
@@ -522,8 +560,7 @@ static void draw_results(int mode, result_t r[9], int selected, int unit_mode)
     dclear(C_WHITE);
 
     dprint(6, 4, C_BLACK, "%s | 1:%lu",
-        mode == 0 ? "MERIDIANA" : "TRANSVERSAL",
-        (unsigned long)in.scale);
+        projection_short(mode), (unsigned long)in.scale);
 
     dline(5, 23, DWIDTH - 6, 23, C_BLACK);
 
@@ -602,13 +639,7 @@ static void compute_single(int mode, coord_t phi_c, coord_t lambda_c,
     double lambda = coord_decimal(lambda_c);
     double delta = 90.0 - phi;
 
-    double m;
-    if(mode == 0) {
-        m = (double)in.radius * rad(delta);
-    }
-    else {
-        m = (double)in.radius * sin(rad(delta));
-    }
+    double m = projection_m(mode, (double)in.radius, delta);
 
     r->delta = delta;
     r->m = m;
@@ -629,7 +660,7 @@ static void draw_quick_screen(int mode, int selected)
 
     dclear(C_WHITE);
     dprint(6, 4, C_BLACK, "RESULTADO RAPIDO | %s",
-        mode == 0 ? "MERID" : "TRANSV");
+        projection_short(mode));
     dprint(6, 22, C_BLACK, "R=%lu  Escala=1:%lu",
         (unsigned long)in.radius, (unsigned long)in.scale);
 
@@ -673,7 +704,7 @@ static void draw_quick_screen(int mode, int selected)
     fmt_fixed(buf, sizeof buf, r.x_cm, 2);
     dprint(8, 184, C_BLACK, "X plano= %s cm", buf);
 
-    dtext(5, 202, C_BLACK, "EXE editar  F1 cambiar proyeccion  EXIT");
+    dtext(5, 202, C_BLACK, "EXE editar  F1 siguiente proyeccion  EXIT");
     dupdate();
 }
 
@@ -689,7 +720,7 @@ static void quick_result_screen(void)
         if(key == KEY_EXIT) return;
         if(key == KEY_UP && selected > 0) selected--;
         else if(key == KEY_DOWN && selected < 1) selected++;
-        else if(key == KEY_F1) mode = 1 - mode;
+        else if(key == KEY_F1) mode = (mode + 1) % 4;
         else if(key == KEY_EXE) {
             if(selected == 0) {
                 edit_coord("phi", &quick_phi, 90);
@@ -765,11 +796,11 @@ int main(void)
         if(key == KEY_UP && selected > 0) {
             selected--;
         }
-        else if(key == KEY_DOWN && selected < 2) {
+        else if(key == KEY_DOWN && selected < 4) {
             selected++;
         }
         else if(key == KEY_EXE) {
-            if(selected < 2) input_screen(selected);
+            if(selected < 4) input_screen(selected);
             else quick_result_screen();
         }
         else if(key == KEY_F1) {
@@ -777,6 +808,15 @@ int main(void)
         }
         else if(key == KEY_F2) {
             input_screen(1);
+        }
+        else if(key == KEY_F3) {
+            input_screen(2);
+        }
+        else if(key == KEY_F4) {
+            input_screen(3);
+        }
+        else if(key == KEY_F5) {
+            quick_result_screen();
         }
     }
 
