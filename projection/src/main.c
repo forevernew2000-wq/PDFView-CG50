@@ -58,7 +58,8 @@ static char const *projection_name(int mode)
     if(mode == 0) return "EQUIDISTANTE MERIDIANA";
     if(mode == 1) return "EQUIDISTANTE TRANSVERSAL";
     if(mode == 2) return "EQUIVALENTE";
-    return "CONFORME";
+    if(mode == 3) return "CONFORME";
+    return "CONICA EQUIDISTANTE";
 }
 
 static char const *projection_short(int mode)
@@ -66,7 +67,8 @@ static char const *projection_short(int mode)
     if(mode == 0) return "MERID";
     if(mode == 1) return "TRANSV";
     if(mode == 2) return "EQUIV";
-    return "CONF";
+    if(mode == 3) return "CONF";
+    return "CONICA";
 }
 
 static char const *projection_formula(int mode)
@@ -74,7 +76,8 @@ static char const *projection_formula(int mode)
     if(mode == 0) return "m = R * delta";
     if(mode == 1) return "m = R * seno(delta)";
     if(mode == 2) return "m = 2R * seno(delta/2)";
-    return "m = 2R * tan(delta/2)";
+    if(mode == 3) return "m = 2R * tan(delta/2)";
+    return "phi2 standard; lambda2 central";
 }
 
 static double projection_m(int mode, double radius, double delta_deg)
@@ -300,22 +303,33 @@ static void show_formula(int mode)
     dclear(C_WHITE);
     dtext(8, 8, C_BLACK, projection_name(mode));
 
-    dtext(8, 39, C_BLACK, "delta = 90 - phi");
-    dtext(8, 67, C_BLACK, projection_formula(mode));
-
-    if(mode == 0) {
-        dtext(8, 87, C_BLACK, "delta se usa en radianes");
+    if(mode == 4) {
+        dtext(8, 34, C_BLACK, "delta0 = 90 - phi standard");
+        dtext(8, 56, C_BLACK, "n = cos(delta0)");
+        dtext(8, 78, C_BLACK, "dLambda = lambda0 - lambda");
+        dtext(8, 100, C_BLACK, "dLambda' = n * dLambda");
+        dtext(8, 122, C_BLACK, "mo = R * tan(delta0)");
+        dtext(8, 144, C_BLACK, "m = mo - R*(delta0-delta)");
+        dtext(8, 166, C_BLACK, "X=m sen(dLambda')  Y=mo-m cos(dLambda')");
+        dtext(8, 188, C_BLACK, "phi2=standard | lambda2=central");
     }
     else {
-        dtext(8, 87, C_BLACK, "seno/tan usan delta en radianes");
+        dtext(8, 39, C_BLACK, "delta = 90 - phi");
+        dtext(8, 67, C_BLACK, projection_formula(mode));
+
+        if(mode == 0) {
+            dtext(8, 87, C_BLACK, "delta se usa en radianes");
+        }
+        else {
+            dtext(8, 87, C_BLACK, "seno/tan usan delta en radianes");
+        }
+
+        dtext(8, 111, C_BLACK, "Y = m * seno(lambda)");
+        dtext(8, 139, C_BLACK, "X = m * cos(lambda)");
+        dtext(8, 167, C_BLACK, "Plano cm = metros / escala * 100");
     }
 
-    dtext(8, 111, C_BLACK, "Y = m * seno(lambda)");
-    dtext(8, 139, C_BLACK, "X = m * cos(lambda)");
-    dtext(8, 167, C_BLACK, "Plano cm = metros / escala * 100");
-
-    dline(8, 188, DWIDTH - 9, 188, C_BLACK);
-    dtext(8, 199, C_BLACK, "Cualquier tecla para volver");
+    dline(8, 202, DWIDTH - 9, 202, C_BLACK);
     dupdate();
     getkey();
 }
@@ -351,42 +365,44 @@ static void show_grid(void)
 
 static void draw_main_menu(int selected)
 {
-    static char const *titles[5] = {
+    static char const *titles[6] = {
         "1. EQUIDISTANTE MERIDIANA",
         "2. EQUIDISTANTE TRANSVERSAL",
         "3. EQUIVALENTE",
         "4. CONFORME",
-        "5. RESULTADO RAPIDO"
+        "5. CONICA EQUIDISTANTE",
+        "6. RESULTADO RAPIDO"
     };
 
-    static char const *subtitles[5] = {
+    static char const *subtitles[6] = {
         "m = R * delta",
         "m = R * seno(delta)",
         "m = 2R * seno(delta/2)",
         "m = 2R * tan(delta/2)",
+        "1 paralelo standard",
         "un solo phi + lambda"
     };
 
     dclear(C_WHITE);
-    draw_centered(3, "PROYCALC v4 - fx-CG50");
+    draw_centered(2, "PROYCALC v5 - fx-CG50");
 
-    for(int i = 0; i < 5; i++) {
-        int y = 25 + i * 34;
+    for(int i = 0; i < 6; i++) {
+        int y = 20 + i * 29;
         int fg = C_BLACK;
 
         if(i == selected) {
-            drect(8, y, DWIDTH - 9, y + 30, C_BLACK);
+            drect(6, y, DWIDTH - 7, y + 26, C_BLACK);
             fg = C_WHITE;
         }
         else {
-            draw_box(8, y, DWIDTH - 9, y + 30, 0);
+            draw_box(6, y, DWIDTH - 7, y + 26, 0);
         }
 
-        dtext(18, y + 3, fg, titles[i]);
-        dtext(28, y + 16, fg, subtitles[i]);
+        dtext(14, y + 2, fg, titles[i]);
+        dtext(24, y + 14, fg, subtitles[i]);
     }
 
-    dtext(8, 199, C_BLACK, "ARRIBA/ABAJO elegir   EXE abrir   EXIT");
+    dtext(8, 198, C_BLACK, "ARRIBA/ABAJO elegir | EXE abrir | EXIT");
     dupdate();
 }
 
@@ -442,6 +458,12 @@ static void draw_input_screen(int mode, int selected)
 
 static void compute_results(int mode, result_t out[9])
 {
+    double phi0 = coord_decimal(in.phi[1]);
+    double lambda0 = coord_decimal(in.lambda[1]);
+    double delta0 = 90.0 - phi0;
+    double n = cos(rad(delta0));
+    double mo = (double)in.radius * tan(rad(delta0));
+
     for(int p = 0; p < 9; p++) {
         int phi_i = p / 3;
         int lambda_i = p % 3;
@@ -449,11 +471,23 @@ static void compute_results(int mode, result_t out[9])
         double phi = coord_decimal(in.phi[phi_i]);
         double lambda = coord_decimal(in.lambda[lambda_i]);
         double delta = 90.0 - phi;
+        double m;
+        double y;
+        double x;
 
-        double m = projection_m(mode, (double)in.radius, delta);
+        if(mode == 4) {
+            double d_lambda = lambda0 - lambda;
+            double d_lambda_prime = n * d_lambda;
 
-        double y = m * sin(rad(lambda));
-        double x = m * cos(rad(lambda));
+            m = mo - (double)in.radius * rad(delta0 - delta);
+            x = m * sin(rad(d_lambda_prime));
+            y = mo - m * cos(rad(d_lambda_prime));
+        }
+        else {
+            m = projection_m(mode, (double)in.radius, delta);
+            y = m * sin(rad(lambda));
+            x = m * cos(rad(lambda));
+        }
 
         out[p].delta = delta;
         out[p].m = m;
@@ -533,23 +567,27 @@ static void draw_point_detail(int mode, int p, result_t *r)
         lambda_i + 1, in.lambda[lambda_i].deg, in.lambda[lambda_i].min,
         in.lambda[lambda_i].sec);
 
+    if(mode == 4) {
+        dprint(8, 76, C_BLACK, "standard phi2 | central lambda2");
+    }
+
     fmt_fixed(buf, sizeof buf, r->delta, 2);
-    dprint(8, 84, C_BLACK, "delta   = %s deg", buf);
+    dprint(8, mode == 4 ? 94 : 84, C_BLACK, "delta   = %s deg", buf);
 
     fmt_fixed(buf, sizeof buf, r->m, 2);
-    dprint(8, 105, C_BLACK, "m       = %s", buf);
+    dprint(8, mode == 4 ? 113 : 105, C_BLACK, "m       = %s", buf);
 
     fmt_fixed(buf, sizeof buf, r->y, 2);
-    dprint(8, 128, C_BLACK, "Y real  = %s m", buf);
+    dprint(8, mode == 4 ? 134 : 128, C_BLACK, "Y real  = %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r->x, 2);
-    dprint(8, 149, C_BLACK, "X real  = %s m", buf);
+    dprint(8, mode == 4 ? 155 : 149, C_BLACK, "X real  = %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r->y_cm, 2);
-    dprint(8, 172, C_BLACK, "Y plano = %s cm", buf);
+    dprint(8, mode == 4 ? 176 : 172, C_BLACK, "Y plano = %s cm", buf);
 
     fmt_fixed(buf, sizeof buf, r->x_cm, 2);
-    dprint(8, 193, C_BLACK, "X plano = %s cm", buf);
+    dprint(8, mode == 4 ? 197 : 193, C_BLACK, "X plano = %s cm", buf);
 
     dupdate();
     getkey();
@@ -796,28 +834,19 @@ int main(void)
         if(key == KEY_UP && selected > 0) {
             selected--;
         }
-        else if(key == KEY_DOWN && selected < 4) {
+        else if(key == KEY_DOWN && selected < 5) {
             selected++;
         }
         else if(key == KEY_EXE) {
-            if(selected < 4) input_screen(selected);
+            if(selected < 5) input_screen(selected);
             else quick_result_screen();
         }
-        else if(key == KEY_F1) {
-            input_screen(0);
-        }
-        else if(key == KEY_F2) {
-            input_screen(1);
-        }
-        else if(key == KEY_F3) {
-            input_screen(2);
-        }
-        else if(key == KEY_F4) {
-            input_screen(3);
-        }
-        else if(key == KEY_F5) {
-            quick_result_screen();
-        }
+        else if(key == KEY_F1) input_screen(0);
+        else if(key == KEY_F2) input_screen(1);
+        else if(key == KEY_F3) input_screen(2);
+        else if(key == KEY_F4) input_screen(3);
+        else if(key == KEY_F5) input_screen(4);
+        else if(key == KEY_F6) quick_result_screen();
     }
 
     return 1;
