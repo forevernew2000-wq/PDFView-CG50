@@ -556,6 +556,68 @@ static void draw_point_detail(int mode, int p, result_t *r)
     int lambda_i = p % 3;
     char buf[40];
 
+    if(mode == 4) {
+        double phi = coord_decimal(in.phi[phi_i]);
+        double lambda = coord_decimal(in.lambda[lambda_i]);
+        double phi0 = coord_decimal(in.phi[1]);
+        double lambda0 = coord_decimal(in.lambda[1]);
+        double delta = 90.0 - phi;
+        double delta0 = 90.0 - phi0;
+        double n = cos(rad(delta0));
+        double d_lambda = lambda0 - lambda;
+        double d_lambda_prime = n * d_lambda;
+        double mo = (double)in.radius * tan(rad(delta0));
+
+        dclear(C_WHITE);
+        dprint(6, 4, C_BLACK, "PUNTO %c | CONICA | DATOS COMPLETOS",
+            POINT_LABELS[p]);
+        dline(5, 23, DWIDTH - 6, 23, C_BLACK);
+        dline(DWIDTH / 2, 29, DWIDTH / 2, 188, C_BLACK);
+
+        dtext(8, 31, C_BLACK, "ENTRADAS / INTERMEDIOS");
+        dprint(8, 49, C_BLACK, "phi = %d deg %02d' %02d\"",
+            in.phi[phi_i].deg, in.phi[phi_i].min, in.phi[phi_i].sec);
+        dprint(8, 65, C_BLACK, "lam = %d deg %02d' %02d\"",
+            in.lambda[lambda_i].deg, in.lambda[lambda_i].min,
+            in.lambda[lambda_i].sec);
+        dprint(8, 81, C_BLACK, "phi0 = %d deg %02d' %02d\"",
+            in.phi[1].deg, in.phi[1].min, in.phi[1].sec);
+        dprint(8, 97, C_BLACK, "lam0 = %d deg %02d' %02d\"",
+            in.lambda[1].deg, in.lambda[1].min, in.lambda[1].sec);
+
+        fmt_fixed(buf, sizeof buf, delta, 2);
+        dprint(8, 115, C_BLACK, "delta = %s", buf);
+        fmt_fixed(buf, sizeof buf, delta0, 2);
+        dprint(8, 131, C_BLACK, "delta0= %s", buf);
+        fmt_fixed(buf, sizeof buf, n, 2);
+        dprint(8, 147, C_BLACK, "n = %s", buf);
+        fmt_fixed(buf, sizeof buf, d_lambda, 2);
+        dprint(8, 163, C_BLACK, "dLam = %s", buf);
+        fmt_fixed(buf, sizeof buf, d_lambda_prime, 2);
+        dprint(8, 179, C_BLACK, "dLam'= %s", buf);
+
+        dtext(202, 31, C_BLACK, "RESULTADOS");
+        fmt_fixed(buf, sizeof buf, mo, 2);
+        dprint(202, 51, C_BLACK, "mo = %s", buf);
+        fmt_fixed(buf, sizeof buf, r->m, 2);
+        dprint(202, 70, C_BLACK, "m  = %s", buf);
+        fmt_fixed(buf, sizeof buf, r->y, 2);
+        dprint(202, 89, C_BLACK, "Y  = %s m", buf);
+        fmt_fixed(buf, sizeof buf, r->x, 2);
+        dprint(202, 108, C_BLACK, "X  = %s m", buf);
+        fmt_fixed(buf, sizeof buf, r->y_cm, 2);
+        dprint(202, 127, C_BLACK, "Ycm= %s", buf);
+        fmt_fixed(buf, sizeof buf, r->x_cm, 2);
+        dprint(202, 146, C_BLACK, "Xcm= %s", buf);
+        dprint(202, 165, C_BLACK, "esc=1:%lu", (unsigned long)in.scale);
+
+        dline(5, 194, DWIDTH - 6, 194, C_BLACK);
+        dtext(8, 199, C_BLACK, "phi0=phi2 standard | lam0=lambda2 central");
+        dupdate();
+        getkey();
+        return;
+    }
+
     dclear(C_WHITE);
     dprint(8, 6, C_BLACK, "PUNTO %c | %s",
         POINT_LABELS[p], projection_short(mode));
@@ -567,27 +629,23 @@ static void draw_point_detail(int mode, int p, result_t *r)
         lambda_i + 1, in.lambda[lambda_i].deg, in.lambda[lambda_i].min,
         in.lambda[lambda_i].sec);
 
-    if(mode == 4) {
-        dprint(8, 76, C_BLACK, "standard phi2 | central lambda2");
-    }
-
     fmt_fixed(buf, sizeof buf, r->delta, 2);
-    dprint(8, mode == 4 ? 94 : 84, C_BLACK, "delta   = %s deg", buf);
+    dprint(8, 84, C_BLACK, "delta   = %s deg", buf);
 
     fmt_fixed(buf, sizeof buf, r->m, 2);
-    dprint(8, mode == 4 ? 113 : 105, C_BLACK, "m       = %s", buf);
+    dprint(8, 105, C_BLACK, "m       = %s", buf);
 
     fmt_fixed(buf, sizeof buf, r->y, 2);
-    dprint(8, mode == 4 ? 134 : 128, C_BLACK, "Y real  = %s m", buf);
+    dprint(8, 128, C_BLACK, "Y real  = %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r->x, 2);
-    dprint(8, mode == 4 ? 155 : 149, C_BLACK, "X real  = %s m", buf);
+    dprint(8, 149, C_BLACK, "X real  = %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r->y_cm, 2);
-    dprint(8, mode == 4 ? 176 : 172, C_BLACK, "Y plano = %s cm", buf);
+    dprint(8, 172, C_BLACK, "Y plano = %s cm", buf);
 
     fmt_fixed(buf, sizeof buf, r->x_cm, 2);
-    dprint(8, mode == 4 ? 197 : 193, C_BLACK, "X plano = %s cm", buf);
+    dprint(8, 193, C_BLACK, "X plano = %s cm", buf);
 
     dupdate();
     getkey();
