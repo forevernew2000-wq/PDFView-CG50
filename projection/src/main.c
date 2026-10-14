@@ -669,6 +669,8 @@ static void results_screen(int mode)
 
 static coord_t quick_phi = {10, 0, 0};
 static coord_t quick_lambda = {50, 30, 0};
+static coord_t quick_phi0 = {10, 10, 0};
+static coord_t quick_lambda0 = {50, 20, 0};
 
 static void compute_single(int mode, coord_t phi_c, coord_t lambda_c,
     result_t *r)
@@ -677,14 +679,35 @@ static void compute_single(int mode, coord_t phi_c, coord_t lambda_c,
     double lambda = coord_decimal(lambda_c);
     double delta = 90.0 - phi;
 
-    double m = projection_m(mode, (double)in.radius, delta);
+    double m;
+    double y;
+    double x;
+
+    if(mode == 4) {
+        double phi0 = coord_decimal(quick_phi0);
+        double lambda0 = coord_decimal(quick_lambda0);
+        double delta0 = 90.0 - phi0;
+        double n = cos(rad(delta0));
+        double mo = (double)in.radius * tan(rad(delta0));
+        double d_lambda = lambda0 - lambda;
+        double d_lambda_prime = n * d_lambda;
+
+        m = mo - (double)in.radius * rad(delta0 - delta);
+        x = m * sin(rad(d_lambda_prime));
+        y = mo - m * cos(rad(d_lambda_prime));
+    }
+    else {
+        m = projection_m(mode, (double)in.radius, delta);
+        y = m * sin(rad(lambda));
+        x = m * cos(rad(lambda));
+    }
 
     r->delta = delta;
     r->m = m;
-    r->y = m * sin(rad(lambda));
-    r->x = m * cos(rad(lambda));
-    r->y_cm = r->y / (double)in.scale * 100.0;
-    r->x_cm = r->x / (double)in.scale * 100.0;
+    r->y = y;
+    r->x = x;
+    r->y_cm = y / (double)in.scale * 100.0;
+    r->x_cm = x / (double)in.scale * 100.0;
 }
 
 static void draw_quick_screen(int mode, int selected)
@@ -692,57 +715,52 @@ static void draw_quick_screen(int mode, int selected)
     result_t r;
     compute_single(mode, quick_phi, quick_lambda, &r);
 
-    char phi_text[48], lambda_text[48], buf[40];
+    char phi_text[48], lambda_text[48], phi0_text[48], lambda0_text[48], buf[40];
     format_coord(phi_text, sizeof phi_text, quick_phi);
     format_coord(lambda_text, sizeof lambda_text, quick_lambda);
+    format_coord(phi0_text, sizeof phi0_text, quick_phi0);
+    format_coord(lambda0_text, sizeof lambda0_text, quick_lambda0);
 
     dclear(C_WHITE);
-    dprint(6, 4, C_BLACK, "RESULTADO RAPIDO | %s",
-        projection_short(mode));
-    dprint(6, 22, C_BLACK, "R=%lu  Escala=1:%lu",
-        (unsigned long)in.radius, (unsigned long)in.scale);
+    dprint(6, 3, C_BLACK, "RESULTADO RAPIDO | %s", projection_short(mode));
 
-    if(selected == 0) {
-        drect(4, 40, DWIDTH - 5, 58, C_BLACK);
-        dtext(10, 43, C_WHITE, "phi");
-        dtext(92, 43, C_WHITE, phi_text);
-    }
-    else {
-        dtext(10, 43, C_BLACK, "phi");
-        dtext(92, 43, C_BLACK, phi_text);
-    }
+    int row_y[4] = {24, 43, 62, 81};
+    char const *labels[4] = {"phi", "lambda", "phi0 std", "lambda0 cen"};
+    char const *values[4] = {phi_text, lambda_text, phi0_text, lambda0_text};
+    int rows = (mode == 4) ? 4 : 2;
 
-    if(selected == 1) {
-        drect(4, 62, DWIDTH - 5, 80, C_BLACK);
-        dtext(10, 65, C_WHITE, "lambda");
-        dtext(92, 65, C_WHITE, lambda_text);
-    }
-    else {
-        dtext(10, 65, C_BLACK, "lambda");
-        dtext(92, 65, C_BLACK, lambda_text);
+    for(int i = 0; i < rows; i++) {
+        int fg = C_BLACK;
+        if(i == selected) {
+            drect(4, row_y[i] - 1, DWIDTH - 5, row_y[i] + 15, C_BLACK);
+            fg = C_WHITE;
+        }
+        dtext(9, row_y[i], fg, labels[i]);
+        dtext(104, row_y[i], fg, values[i]);
     }
 
-    dline(5, 87, DWIDTH - 6, 87, C_BLACK);
+    int base = (mode == 4) ? 105 : 67;
+    dline(5, base - 6, DWIDTH - 6, base - 6, C_BLACK);
 
     fmt_fixed(buf, sizeof buf, r.delta, 4);
-    dprint(8, 94, C_BLACK, "delta  = %s deg", buf);
+    dprint(8, base, C_BLACK, "delta = %s deg", buf);
 
     fmt_fixed(buf, sizeof buf, r.m, 2);
-    dprint(8, 112, C_BLACK, "m      = %s", buf);
+    dprint(8, base + 17, C_BLACK, "m     = %s", buf);
 
     fmt_fixed(buf, sizeof buf, r.y, 2);
-    dprint(8, 130, C_BLACK, "Y real = %s m", buf);
+    dprint(8, base + 34, C_BLACK, "Y real= %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r.x, 2);
-    dprint(8, 148, C_BLACK, "X real = %s m", buf);
+    dprint(8, base + 51, C_BLACK, "X real= %s m", buf);
 
     fmt_fixed(buf, sizeof buf, r.y_cm, 2);
-    dprint(8, 166, C_BLACK, "Y plano= %s cm", buf);
+    dprint(8, base + 68, C_BLACK, "Y cm  = %s", buf);
 
     fmt_fixed(buf, sizeof buf, r.x_cm, 2);
-    dprint(8, 184, C_BLACK, "X plano= %s cm", buf);
+    dprint(8, base + 85, C_BLACK, "X cm  = %s", buf);
 
-    dtext(5, 202, C_BLACK, "EXE editar  F1 siguiente proyeccion  EXIT");
+    dtext(5, 202, C_BLACK, "EXE editar | F1 sig. proyeccion | EXIT");
     dupdate();
 }
 
@@ -752,19 +770,31 @@ static void quick_result_screen(void)
     int selected = 0;
 
     while(1) {
+        int max_selected = (mode == 4) ? 3 : 1;
+        if(selected > max_selected) selected = max_selected;
+
         draw_quick_screen(mode, selected);
         int key = getkey().key;
 
         if(key == KEY_EXIT) return;
         if(key == KEY_UP && selected > 0) selected--;
-        else if(key == KEY_DOWN && selected < 1) selected++;
-        else if(key == KEY_F1) mode = (mode + 1) % 4;
+        else if(key == KEY_DOWN && selected < max_selected) selected++;
+        else if(key == KEY_F1) {
+            mode = (mode + 1) % 5;
+            selected = 0;
+        }
         else if(key == KEY_EXE) {
             if(selected == 0) {
                 edit_coord("phi", &quick_phi, 90);
             }
-            else {
+            else if(selected == 1) {
                 edit_coord("lambda", &quick_lambda, 359);
+            }
+            else if(selected == 2) {
+                edit_coord("phi0 standard", &quick_phi0, 90);
+            }
+            else {
+                edit_coord("lambda0 central", &quick_lambda0, 359);
             }
         }
     }
