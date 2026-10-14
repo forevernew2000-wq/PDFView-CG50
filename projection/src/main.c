@@ -113,6 +113,19 @@ static void fmt_fixed(char *buf, size_t size, double value, int decimals)
     }
 }
 
+static void fmt_n6(char *buf, size_t size, double value)
+{
+    int negative = value < 0.0;
+    if(negative) value = -value;
+
+    long scaled = (long)(value * 1000000.0 + 0.5);
+    long whole = scaled / 1000000L;
+    long frac = scaled % 1000000L;
+
+    snprintf(buf, size, "%s%ld.%06ld",
+        negative ? "-" : "", whole, frac);
+}
+
 static void draw_centered(int y, char const *text)
 {
     int w = 0, h = 0;
@@ -334,9 +347,23 @@ static void show_formula(int mode)
     getkey();
 }
 
-static void show_grid(void)
+static void show_grid(int mode)
 {
     dclear(C_WHITE);
+
+    if(mode == 4) {
+        draw_centered(8, "PUNTOS CONICA");
+        dtext(28, 43, C_BLACK, "A = phi1 + lambda1");
+        dtext(28, 78, C_BLACK, "B = phi2 + lambda2");
+        dtext(28, 113, C_BLACK, "C = phi3 + lambda3");
+        dtext(28, 150, C_BLACK, "phi2 = paralelo standard");
+        dtext(28, 174, C_BLACK, "lambda2 = meridiano central");
+        dtext(28, 199, C_BLACK, "Solo 3 puntos emparejados");
+        dupdate();
+        getkey();
+        return;
+    }
+
     draw_centered(8, "MALLA DE PUNTOS");
 
     dtext(80, 40, C_BLACK, "lambda1");
@@ -352,9 +379,9 @@ static void show_grid(void)
     char label = 'A';
 
     for(int r = 0; r < 3; r++) {
-        for(int c = 0; c < 3; c++) {
-            drect(xs[c] - 18, ys[r] - 6, xs[c] + 18, ys[r] + 20, C_BLACK);
-            dprint(xs[c] - 4, ys[r], C_WHITE, "%c", label++);
+        for(int col = 0; col < 3; col++) {
+            drect(xs[col] - 18, ys[r] - 6, xs[col] + 18, ys[r] + 20, C_BLACK);
+            dprint(xs[col] - 4, ys[r], C_WHITE, "%c", label++);
         }
     }
 
@@ -384,7 +411,7 @@ static void draw_main_menu(int selected)
     };
 
     dclear(C_WHITE);
-    draw_centered(2, "PROYCALC v5 - fx-CG50");
+    draw_centered(2, "PROYCALC v8 - fx-CG50");
 
     for(int i = 0; i < 6; i++) {
         int y = 20 + i * 29;
@@ -463,10 +490,11 @@ static void compute_results(int mode, result_t out[9])
     double delta0 = 90.0 - phi0;
     double n = cos(rad(delta0));
     double mo = (double)in.radius * tan(rad(delta0));
+    int count = (mode == 4) ? 3 : 9;
 
-    for(int p = 0; p < 9; p++) {
-        int phi_i = p / 3;
-        int lambda_i = p % 3;
+    for(int p = 0; p < count; p++) {
+        int phi_i = (mode == 4) ? p : p / 3;
+        int lambda_i = (mode == 4) ? p : p % 3;
 
         double phi = coord_decimal(in.phi[phi_i]);
         double lambda = coord_decimal(in.lambda[lambda_i]);
@@ -498,12 +526,13 @@ static void compute_results(int mode, result_t out[9])
     }
 }
 
-static void draw_summary(result_t r[9])
+static void draw_summary(int mode, result_t r[9])
 {
+    int count = (mode == 4) ? 3 : 9;
     double ymax = r[0].y, ymin = r[0].y;
     double xmax = r[0].x, xmin = r[0].x;
 
-    for(int i = 1; i < 9; i++) {
+    for(int i = 1; i < count; i++) {
         if(r[i].y > ymax) ymax = r[i].y;
         if(r[i].y < ymin) ymin = r[i].y;
         if(r[i].x > xmax) xmax = r[i].x;
@@ -552,8 +581,8 @@ static void draw_summary(result_t r[9])
 
 static void draw_point_detail(int mode, int p, result_t *r)
 {
-    int phi_i = p / 3;
-    int lambda_i = p % 3;
+    int phi_i = (mode == 4) ? p : p / 3;
+    int lambda_i = (mode == 4) ? p : p % 3;
     char buf[40];
 
     if(mode == 4) {
@@ -589,7 +618,7 @@ static void draw_point_detail(int mode, int p, result_t *r)
         dprint(8, 115, C_BLACK, "delta = %s", buf);
         fmt_fixed(buf, sizeof buf, delta0, 2);
         dprint(8, 131, C_BLACK, "delta0= %s", buf);
-        fmt_fixed(buf, sizeof buf, n, 2);
+        fmt_n6(buf, sizeof buf, n);
         dprint(8, 147, C_BLACK, "n = %s", buf);
         fmt_fixed(buf, sizeof buf, d_lambda, 2);
         dprint(8, 163, C_BLACK, "dLam = %s", buf);
@@ -671,7 +700,9 @@ static void draw_results(int mode, result_t r[9], int selected, int unit_mode)
         dtext(224, 28, C_BLACK, "X REAL (m)");
     }
 
-    for(int i = 0; i < 9; i++) {
+    int count = (mode == 4) ? 3 : 9;
+
+    for(int i = 0; i < count; i++) {
         int y = 47 + i * 15;
         int fg = C_BLACK;
 
@@ -709,6 +740,7 @@ static void results_screen(int mode)
 
     int selected = 0;
     int unit_mode = 0;
+    int count = (mode == 4) ? 3 : 9;
 
     while(1) {
         draw_results(mode, r, selected, unit_mode);
@@ -717,10 +749,10 @@ static void results_screen(int mode)
         if(key == KEY_EXIT) return;
 
         if(key == KEY_UP && selected > 0) selected--;
-        else if(key == KEY_DOWN && selected < 8) selected++;
+        else if(key == KEY_DOWN && selected < count - 1) selected++;
         else if(key == KEY_F1) unit_mode = !unit_mode;
-        else if(key == KEY_F2) draw_summary(r);
-        else if(key == KEY_F3) show_grid();
+        else if(key == KEY_F2) draw_summary(mode, r);
+        else if(key == KEY_F3) show_grid(mode);
         else if(key == KEY_EXE) draw_point_detail(mode, selected, &r[selected]);
     }
 }
@@ -878,7 +910,7 @@ static void input_screen(int mode)
             show_formula(mode);
         }
         else if(key == KEY_F3) {
-            show_grid();
+            show_grid(mode);
         }
         else if(key == KEY_F1) {
             if(in.radius == 0 || in.scale == 0) {
